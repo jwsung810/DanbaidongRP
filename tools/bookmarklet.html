@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>미래엔 교과서 PDF 추출 북마클릿</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f172a; color: #e2e8f0;
+    min-height: 100vh; padding: 20px;
+  }
+  .container { max-width: 600px; margin: 0 auto; }
+  h1 { font-size: 1.4em; text-align: center; margin-bottom: 8px; color: #38bdf8; }
+  .subtitle { text-align: center; color: #94a3b8; margin-bottom: 24px; font-size: 0.9em; }
+  .card {
+    background: #1e293b; border-radius: 12px;
+    padding: 20px; margin-bottom: 16px;
+    border: 1px solid #334155;
+  }
+  .card h2 { color: #38bdf8; font-size: 1.1em; margin-bottom: 12px; }
+  .step { display: flex; gap: 12px; margin-bottom: 12px; }
+  .step-num {
+    flex-shrink: 0; width: 28px; height: 28px;
+    background: #38bdf8; color: #0f172a;
+    border-radius: 50%; display: flex;
+    align-items: center; justify-content: center;
+    font-weight: bold; font-size: 0.85em;
+  }
+  .step-text { font-size: 0.95em; line-height: 1.5; color: #cbd5e1; }
+  .code-block {
+    background: #0f172a; border: 1px solid #334155;
+    border-radius: 8px; padding: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75em; line-height: 1.4;
+    overflow-x: auto; word-break: break-all;
+    color: #a5f3fc; margin: 8px 0;
+    user-select: all; -webkit-user-select: all;
+  }
+  .btn {
+    display: block; width: 100%;
+    background: #2563eb; color: white;
+    border: none; border-radius: 8px;
+    padding: 14px; font-size: 1em;
+    font-weight: 600; cursor: pointer;
+    text-align: center; margin-top: 12px;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:active { background: #1d4ed8; }
+  .btn-green { background: #059669; }
+  .btn-green:active { background: #047857; }
+  .btn-orange { background: #d97706; }
+  .btn-orange:active { background: #b45309; }
+  .note {
+    background: #1a1a2e; border-left: 3px solid #f59e0b;
+    padding: 10px 14px; border-radius: 0 8px 8px 0;
+    font-size: 0.85em; color: #fbbf24; margin-top: 12px;
+  }
+  .select-group { margin-bottom: 12px; }
+  .select-group label { display: block; color: #94a3b8; margin-bottom: 4px; font-size: 0.85em; }
+  .select-group select, .select-group input {
+    width: 100%; padding: 10px; border-radius: 8px;
+    border: 1px solid #334155; background: #0f172a;
+    color: #e2e8f0; font-size: 1em;
+  }
+  #status {
+    margin-top: 16px; padding: 12px;
+    border-radius: 8px; display: none;
+    font-size: 0.9em; text-align: center;
+  }
+  .progress-bar {
+    height: 6px; background: #334155; border-radius: 3px;
+    margin-top: 8px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: #38bdf8;
+    border-radius: 3px; transition: width 0.3s;
+    width: 0%;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>미래엔 교과서 PDF 추출</h1>
+  <p class="subtitle">Android Chrome에서 원터치 실행</p>
+
+  <!-- 방법 1: 자동 추출 (같은 페이지에서) -->
+  <div class="card">
+    <h2>방법 1: 자동 추출 (권장)</h2>
+
+    <div class="select-group">
+      <label>과목 선택</label>
+      <select id="subject">
+        <option value="kb2092">화학Ⅱ</option>
+        <option value="kb2091">화학Ⅰ</option>
+        <option value="kb2084">물리학Ⅰ</option>
+        <option value="kb2085">물리학Ⅱ</option>
+        <option value="kb2086">생명과학Ⅰ</option>
+        <option value="kb2087">생명과학Ⅱ</option>
+        <option value="kb2088">지구과학Ⅰ</option>
+        <option value="kb2089">지구과학Ⅱ</option>
+        <option value="kb2083">통합과학</option>
+      </select>
+    </div>
+
+    <div class="select-group">
+      <label>페이지 수 (모르면 기본값 사용)</label>
+      <input type="number" id="pageCount" value="200" min="1" max="500">
+    </div>
+
+    <div class="select-group">
+      <label>페이지 전환 대기(ms)</label>
+      <input type="number" id="delayMs" value="2000" min="500" max="10000" step="500">
+    </div>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">아래 <strong>"교과서 열기"</strong> 버튼으로 뷰어를 새 탭에서 엽니다.</div>
+    </div>
+    <button class="btn" onclick="openEbook()">교과서 열기</button>
+
+    <div class="step" style="margin-top:16px;">
+      <div class="step-num">2</div>
+      <div class="step-text">뷰어가 로드되면 이 탭으로 돌아와서 <strong>"추출 시작"</strong>을 누릅니다.</div>
+    </div>
+    <button class="btn btn-green" onclick="startExtract()">추출 시작</button>
+
+    <div id="status">
+      <div id="statusText">준비 중...</div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+  </div>
+
+  <!-- 방법 2: 북마클릿 -->
+  <div class="card">
+    <h2>방법 2: 북마클릿 (수동)</h2>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">아래 코드를 <strong>전체 복사</strong>합니다.</div>
+    </div>
+
+    <div class="code-block" id="bookmarkletCode"></div>
+    <button class="btn btn-orange" onclick="copyBookmarklet()">코드 복사</button>
+
+    <div class="step" style="margin-top:16px;">
+      <div class="step-num">2</div>
+      <div class="step-text">Chrome에서 아무 북마크를 하나 만들고 → 편집 → URL란에 복사한 코드 붙여넣기</div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">교과서 뷰어 페이지(<code>ebook.mirae-n.com</code>)에서 해당 북마크 탭</div>
+    </div>
+
+    <div class="note">
+      북마클릿은 뷰어 페이지에서 실행해야 합니다. 이 페이지에서는 작동하지 않습니다.
+    </div>
+  </div>
+
+  <!-- 방법 3: Termux -->
+  <div class="card">
+    <h2>방법 3: Termux 원터치</h2>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text"><a href="https://f-droid.org/packages/com.termux/" style="color:#38bdf8">Termux</a> 설치 후 아래 명령어 한 줄 실행:</div>
+    </div>
+    <div class="code-block">curl -sL https://raw.githubusercontent.com/jwsung810/DanbaidongRP/claude/extract-chemistry-pdf-L1owt/tools/android_onetouch.sh | bash</div>
+    <button class="btn btn-orange" onclick="copyTermux()">명령어 복사</button>
+  </div>
+</div>
+
+<script>
+// ── 북마클릿 코드 생성 ──
+const BOOKMARKLET_SRC = `
+javascript:void(function(){
+  var d=document,total=parseInt(prompt('총 페이지 수:','200'),10);
+  if(!total)return;
+  var delay=parseInt(prompt('페이지 전환 대기(ms):','2000'),10)||2000;
+  var s=d.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  s.onload=function(){
+    var c=d.querySelectorAll('canvas'),imgs=d.querySelectorAll('img');
+    var statusDiv=d.createElement('div');
+    statusDiv.style.cssText='position:fixed;top:10px;right:10px;z-index:99999;background:#000;color:#0f0;padding:15px;border-radius:8px;font:14px monospace;min-width:200px';
+    d.body.appendChild(statusDiv);
+    var page=0;
+    function capture(){
+      page++;
+      statusDiv.textContent='캡처: '+page+'/'+total;
+      if(page>total){
+        statusDiv.textContent='PDF 생성 중...';
+        buildPDF();
+        return;
+      }
+      setTimeout(function(){
+        var evt=new KeyboardEvent('keydown',{key:'ArrowRight',code:'ArrowRight',keyCode:39,bubbles:true});
+        d.dispatchEvent(evt);
+        d.body.dispatchEvent(evt);
+        setTimeout(capture,delay);
+      },300);
+    }
+    var captures=[];
+    var origToBlob=HTMLCanvasElement.prototype.toBlob;
+    function grabCanvas(){
+      var biggest=null,maxArea=0;
+      d.querySelectorAll('canvas').forEach(function(cv){
+        var a=cv.width*cv.height;
+        if(a>maxArea){maxArea=a;biggest=cv;}
+      });
+      if(biggest){
+        try{return biggest.toDataURL('image/jpeg',0.85);}catch(e){}
+      }
+      var bigImg=null;maxArea=0;
+      d.querySelectorAll('img').forEach(function(im){
+        var a=im.naturalWidth*im.naturalHeight;
+        if(a>maxArea){maxArea=a;bigImg=im;}
+      });
+      if(bigImg)return bigImg.src;
+      return null;
+    }
+    var pages=[];
+    var origCapture=capture;
+    capture=function(){
+      page++;
+      statusDiv.textContent='캡처: '+page+'/'+total;
+      var src=grabCanvas();
+      if(src)pages.push(src);
+      if(page>=total){
+        statusDiv.textContent='PDF 생성 중... ('+pages.length+'페이지)';
+        setTimeout(function(){makePDF(pages,statusDiv);},500);
+        return;
+      }
+      var evt=new KeyboardEvent('keydown',{key:'ArrowRight',code:'ArrowRight',keyCode:39,bubbles:true});
+      d.dispatchEvent(evt);
+      d.body.dispatchEvent(evt);
+      var clickTargets=d.querySelectorAll('[class*=next],[class*=right],[class*=forward],button[aria-label*=next]');
+      clickTargets.forEach(function(el){try{el.click();}catch(e){}});
+      setTimeout(capture,delay);
+    };
+    function makePDF(pages,statusDiv){
+      if(!pages.length){statusDiv.textContent='ERROR: 캡처된 이미지 없음';return;}
+      var jsPDF=window.jspdf.jsPDF;
+      var img=new Image();
+      img.onload=function(){
+        var w=img.width,h=img.height;
+        var pdf=new jsPDF({orientation:w>h?'l':'p',unit:'px',format:[w,h]});
+        for(var i=0;i<pages.length;i++){
+          statusDiv.textContent='PDF 생성: '+(i+1)+'/'+pages.length;
+          if(i>0)pdf.addPage([w,h],w>h?'l':'p');
+          try{pdf.addImage(pages[i],'JPEG',0,0,w,h);}catch(e){
+            try{pdf.addImage(pages[i],'PNG',0,0,w,h);}catch(e2){}
+          }
+        }
+        pdf.save('미래엔_교과서.pdf');
+        statusDiv.textContent='완료! PDF 다운로드됨 ('+pages.length+'p)';
+        statusDiv.style.background='#006400';
+      };
+      img.onerror=function(){
+        var jsPDF=window.jspdf.jsPDF;
+        var pdf=new jsPDF({unit:'px',format:[800,1100]});
+        statusDiv.textContent='이미지 로드 실패 - 빈 PDF 생성';
+        pdf.save('미래엔_교과서.pdf');
+      };
+      img.src=pages[0];
+    }
+    page=0;
+    setTimeout(capture,1000);
+  };
+  d.head.appendChild(s);
+}())
+`.replace(/\n/g,'').replace(/\s{2,}/g,' ').trim();
+
+document.getElementById('bookmarkletCode').textContent = BOOKMARKLET_SRC;
+
+// ── 교과서 열기 ──
+let ebookWindow = null;
+function openEbook() {
+  const kb = document.getElementById('subject').value;
+  const url = `https://ebook.mirae-n.com/@${kb}/1`;
+  ebookWindow = window.open(url, '_blank');
+  showStatus('뷰어 탭이 열렸습니다. 로드 완료 후 이 탭으로 돌아오세요.', '#2563eb');
+}
+
+// ── 추출 시작 ──
+function startExtract() {
+  if (!ebookWindow || ebookWindow.closed) {
+    showStatus('먼저 "교과서 열기"로 뷰어를 열어주세요.', '#dc2626');
+    return;
+  }
+
+  const totalPages = parseInt(document.getElementById('pageCount').value, 10);
+  const delayMs = parseInt(document.getElementById('delayMs').value, 10);
+
+  showStatus('추출 시작 - 뷰어 탭에서 자동 진행됩니다...', '#059669');
+
+  // 뷰어 탭에 스크립트 주입 시도
+  try {
+    const script = `
+      (function(){
+        var total=${totalPages}, delay=${delayMs};
+        var s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        s.onload=function(){
+          var statusDiv=document.createElement('div');
+          statusDiv.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(0,0,0,0.9);color:#0f0;padding:15px 25px;border-radius:12px;font:16px monospace;text-align:center;min-width:250px';
+          document.body.appendChild(statusDiv);
+
+          function grabCanvas(){
+            var biggest=null,maxArea=0;
+            document.querySelectorAll('canvas').forEach(function(cv){
+              var a=cv.width*cv.height;
+              if(a>maxArea){maxArea=a;biggest=cv;}
+            });
+            if(biggest){try{return biggest.toDataURL('image/jpeg',0.85);}catch(e){}}
+            var bigImg=null;maxArea=0;
+            document.querySelectorAll('img').forEach(function(im){
+              var a=im.naturalWidth*im.naturalHeight;
+              if(a>maxArea){maxArea=a;bigImg=im;}
+            });
+            if(bigImg)return bigImg.src;
+            return null;
+          }
+
+          var pages=[],page=0;
+          function capture(){
+            page++;
+            var pct=Math.round(page/total*100);
+            statusDiv.textContent='캡처 중: '+page+'/'+total+' ('+pct+'%)';
+            var src=grabCanvas();
+            if(src)pages.push(src);
+            if(page>=total){
+              statusDiv.textContent='PDF 생성 중... ('+pages.length+'페이지)';
+              setTimeout(function(){makePDF(pages,statusDiv);},500);
+              return;
+            }
+            var evt=new KeyboardEvent('keydown',{key:'ArrowRight',code:'ArrowRight',keyCode:39,bubbles:true});
+            document.dispatchEvent(evt);
+            document.body.dispatchEvent(evt);
+            document.querySelectorAll('[class*=next],[class*=right],[class*=forward]').forEach(function(el){try{el.click();}catch(e){}});
+            setTimeout(capture,delay);
+          }
+
+          function makePDF(pages,statusDiv){
+            if(!pages.length){statusDiv.textContent='ERROR: 캡처된 이미지 없음';statusDiv.style.color='red';return;}
+            var jsPDF=window.jspdf.jsPDF;
+            var img=new Image();
+            img.onload=function(){
+              var w=img.width,h=img.height;
+              var pdf=new jsPDF({orientation:w>h?'l':'p',unit:'px',format:[w,h]});
+              for(var i=0;i<pages.length;i++){
+                statusDiv.textContent='PDF: '+(i+1)+'/'+pages.length;
+                if(i>0)pdf.addPage([w,h],w>h?'l':'p');
+                try{pdf.addImage(pages[i],'JPEG',0,0,w,h);}catch(e){}
+              }
+              pdf.save('미래엔_교과서.pdf');
+              statusDiv.textContent='완료! ('+pages.length+'p) 다운로드 확인하세요';
+              statusDiv.style.background='#006400';
+            };
+            img.onerror=function(){statusDiv.textContent='이미지 처리 실패';statusDiv.style.color='red';};
+            img.src=pages[0];
+          }
+
+          setTimeout(capture,2000);
+        };
+        document.head.appendChild(s);
+      })();
+    `;
+
+    ebookWindow.eval(script);
+    showStatus('추출 진행 중 - 뷰어 탭을 확인하세요!', '#059669');
+  } catch (e) {
+    showStatus(
+      'CORS 제한으로 직접 주입 불가. 북마클릿 방법(방법 2)을 사용하세요: ' +
+      '뷰어 탭에서 직접 북마클릿을 실행해주세요.',
+      '#d97706'
+    );
+  }
+}
+
+// ── 유틸 ──
+function showStatus(text, color) {
+  const el = document.getElementById('status');
+  el.style.display = 'block';
+  el.style.background = color || '#334155';
+  document.getElementById('statusText').textContent = text;
+}
+
+function copyBookmarklet() {
+  navigator.clipboard.writeText(BOOKMARKLET_SRC).then(
+    () => alert('복사 완료! Chrome 북마크 URL에 붙여넣기 하세요.'),
+    () => {
+      // fallback: 선택
+      const el = document.getElementById('bookmarkletCode');
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      alert('자동 복사 실패 - 텍스트가 선택되었으니 수동으로 복사하세요.');
+    }
+  );
+}
+
+function copyTermux() {
+  const cmd = "curl -sL https://raw.githubusercontent.com/jwsung810/DanbaidongRP/claude/extract-chemistry-pdf-L1owt/tools/android_onetouch.sh | bash";
+  navigator.clipboard.writeText(cmd).then(
+    () => alert('복사 완료! Termux에 붙여넣기 하세요.'),
+    () => alert('복사 실패 - 수동으로 복사하세요.')
+  );
+}
+</script>
+</body>
+</html>
