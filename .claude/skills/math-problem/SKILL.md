@@ -18,11 +18,13 @@ description: 수능/평가원 스타일 한국 고등학교 수학 문제(공통
 
 ## 파이프라인 실행 절차
 
-### Step 1. 리더 호출 (1회)
+### Step 1. 리더 호출 (1회 + 조건부 replan 1회)
 `Task` 도구로 `math-problem-leader` subagent를 호출하여 설계 브리프를 받습니다.
 
-호출 프롬프트 템플릿:
+호출 프롬프트 템플릿 (mode: initial):
 ```
+mode: initial
+
 사용자가 다음과 같이 요청했습니다:
 "<사용자 원문>"
 
@@ -32,10 +34,10 @@ description: 수능/평가원 스타일 한국 고등학교 수학 문제(공통
 - 난이도: <없으면 "지정 없음">
 - 답 형식: <없으면 "지정 없음">
 
-`.claude/skills/math-problem/references/` 의 자료(units, difficulty, patterns, examples, anti-patterns)를 모두 참조하여 설계 브리프를 작성해 주세요.
+`.claude/skills/math-problem/references/` 의 자료(units, difficulty, patterns, examples, anti-patterns)를 모두 참조하여 설계 브리프를 작성해 주세요. 반드시 "주 골격" + "대체 골격 1~2개"를 함께 명시 (AP-6/AP-8 회피).
 ```
 
-받은 출력을 `BRIEF` 변수처럼 보관하고, 이후 모든 루프에서 동일하게 사용합니다.
+받은 출력을 `BRIEF` 변수처럼 보관하고, 이후 모든 루프에서 동일하게 사용합니다. 단 **Step 2에서 replan 트리거 조건이 만족되면 리더를 1회 더 호출**하여 새 브리프로 교체합니다 (전체 5회 루프 중 1회 한정, 아래 Step 2e 참조).
 
 ### Step 2. 제작–검토 루프 (최대 5회)
 
@@ -48,6 +50,9 @@ description: 수능/평가원 스타일 한국 고등학교 수학 문제(공통
 - `last_feedback = ""` (1회차에는 비어 있음)
 - `learning_notes = []` (누적 핵심 결함과 수정안의 리스트. 매 루프 검토 후 append)
 - `consecutive_no_improvement = 0` (조기 종료 카운터)
+- `score_history = []` (매 루프 점수 기록. replan 트리거 판단용)
+- `skeleton_log = []` (매 루프 사용된 골격 1줄 요약. AP-8 점검용)
+- `replan_used = false` (리더 재호출 여부, 1회 한정)
 
 각 루프에서:
 
@@ -106,7 +111,9 @@ description: 수능/평가원 스타일 한국 고등학교 수학 문제(공통
 
 - `score > best_score` 이면 `best_*` 갱신(`best_iteration = iteration` 포함), `consecutive_no_improvement = 0`.
 - 그렇지 않으면 `consecutive_no_improvement += 1`.
+- `score_history.append(score)` 및 `skeleton_log.append(<제작자 출력의 함수/도형 골격 1줄 요약>)`.
 - 검토자 출력에서 "핵심 결함" 1줄과 "구체 수정안" 3줄을 추출하여 `learning_notes`에 `{iter: N, score: X.X, key_flaw: "...", fixes: ["...", "...", "..."]}` 형태로 append.
+- 검토자 출력 마지막 줄에 `REPLAN_HINT:`로 시작하는 줄이 있으면 그 내용도 별도 보관.
 
 **Step 2d. 종료 조건**
 
@@ -114,9 +121,32 @@ description: 수능/평가원 스타일 한국 고등학교 수학 문제(공통
 
 1. `score >= 9.0` (성공)
 2. `iteration == 5` (최대 시도 소진)
-3. `consecutive_no_improvement >= 2` AND `iteration >= 3` (조기 종료: 연속 2회 점수 개선 없음. 다른 발상이 필요할 가능성 — 사용자에게 브리프 재정의 권장)
+3. `consecutive_no_improvement >= 2` AND `iteration >= 3` AND `replan_used == true` (조기 종료: 이미 replan을 시도했음에도 정체 지속 — 사용자에게 단원 재정의 권장)
 
-종료 조건 미충족 시 `iteration += 1`, Step 2a로.
+종료 조건 미충족 시 `iteration += 1`, Step 2e(replan 판정)로.
+
+**Step 2e. Replan 트리거 (5회 루프 중 1회 한정)**
+
+다음 조건이 **모두** 만족되면 리더를 재호출하여 브리프를 교체합니다:
+1. `replan_used == false` (아직 한 번도 사용 안 함)
+2. `iteration >= 3` (최소 3회 시도 후)
+3. `best_score < 8.0` (현재 천장이 만점에 못 미침)
+4. `max(score_history) - min(score_history) < 1.5` (점수 변동 폭 작음 = 천장 형성)
+5. (다음 중 하나) `consecutive_no_improvement >= 1` OR 검토자 피드백에 `REPLAN_HINT` 줄 존재 OR `skeleton_log`의 모든 항목이 사실상 동일
+
+위 조건 만족 시:
+- `math-problem-leader`를 `mode: replan`으로 호출. 다음을 전달:
+  - 사용자 원문
+  - 시도된 골격 목록 (`skeleton_log`)
+  - 누적 학습 노트 전체
+  - 폐기 사유 (점수 정체 + REPLAN_HINT 또는 동일 골격 반복)
+  - 명시적 지시: "위 시도된 골격을 모두 폐기하고, 사용자 원래 단원/번호 요건은 유지하면서 본질 단계가 다른 새 골격으로 브리프를 처음부터 다시 작성하세요. (단, 사용자가 단원/번호를 명시했다면 그 범위 내에서)"
+- 받은 새 브리프로 `BRIEF` 교체. `best_*`, `learning_notes`, `score_history`, `skeleton_log`는 그대로 유지 (학습 보존).
+- `replan_used = true`, `consecutive_no_improvement = 0` 리셋.
+- 사용자에게 "리더 replan 실행 — 새 골격으로 전환" 한 줄 안내.
+- 그 후 Step 2a로 복귀하여 새 브리프로 다음 시도.
+
+Replan을 사용하지 않는 경우(조건 미충족 또는 이미 사용)는 바로 Step 2a로 복귀.
 
 루프 진행 메시지(매 루프 사이):
 - 형식: "시도 N/5 — 점수 X.X/10 (최고 Y.Y/10, 핵심 결함: [한 줄])"
@@ -173,4 +203,18 @@ description: 수능/평가원 스타일 한국 고등학교 수학 문제(공통
 - **모든 시도가 3점대 이하**: 브리프 자체가 비현실적일 수 있음. 리더 재호출보다는 사용자에게 단원/난이도 재정의 요청.
 - **모든 시도가 AP-1(π 무리수) 위반**: 리더 브리프의 "π 소거 전략" 섹션이 명확한지 점검. 삼각함수 합성을 회피하는 단원으로 변경 권유.
 - **모든 시도가 AP-4(영역 부정합) 위반**: 미적분에서 다항으로 후퇴하는 패턴. 브리프의 "미적분 고유 개념 사용 위치"를 더 강제적으로 작성하도록 리더 재설계 고려.
-- **점수가 6~7점에서 정체**: 검토자 채점 기준 동결로 인한 자연스러운 천장. 사용자에게 7점대 결과 활용을 제안.
+- **점수가 6~7점에서 정체 (AP-6/AP-8)**: Step 2e의 replan 트리거가 자동 발동되어야 함. 발동 조건이 안 맞아 정체가 지속되면, 종료 후 사용자에게 "단원 또는 골격을 다른 것으로 명시 후 재호출" 권장.
+- **replan 후에도 점수 변동 없음**: 검토자 채점 기준 동결로 인한 절대 천장. 7~8점대 결과 활용을 제안.
+- **replan 후 점수가 오히려 떨어짐**: 새 골격이 더 어려워 첫 시도에서 자연 저점. 남은 루프(보통 2회)에서 회복 가능. 종료 시점에 best_problem(replan 이전 골격일 수도)을 출력하므로 손실 없음.
+
+## 변경 로그 (skill 자체의 천장 진단)
+
+이 SKILL은 v1.0 → v1.1에서 다음 보강이 이뤄졌습니다 (5회 루프 실증 결과 반영):
+
+- v1.1: AP-6 (독창성 휘발), AP-7 (함정 자동 해소), AP-8 (단원 고착) 신규 추가 (`anti-patterns.md`).
+- v1.1: 리더 브리프에 "주 골격 + 대체 골격 ≥ 1" 의무화 (`leader.md`).
+- v1.1: 제작자 Phase 0에 독창성 자가진단·함정 작동 시뮬레이션·골격 다양성 항목 추가 (`creator.md`).
+- v1.1: 검토자 채점 기준에 AP-6/AP-7 자동 감점 트리거 + REPLAN_HINT 출력 명시 (`reviewer.md`).
+- v1.1: SKILL에 점수 정체 감지 + 리더 replan 1회 호출 메커니즘 추가 (Step 2e).
+
+이 변경의 목표: 미적분 29번 같은 평가원 빈출 단원에서 기존 7.7 천장을 8.5+로 끌어올리는 것. v1.0의 5회 루프는 동일 골격 반복으로 천장에 묶였으나, v1.1은 점수 정체 시 리더가 자동으로 다른 골격을 시도합니다.
